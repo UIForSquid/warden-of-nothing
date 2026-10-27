@@ -1,0 +1,11 @@
+{
+  "message.wardenofnothing.assign.warden_alive": "This city's Warden is still alive; another can't be assigned.",
+  "message.wardenofnothing.assign.not_in_city": "That Warden isn't inside an Ancient City.",
+
+  "block.wardenofnothing.heart_of_the_warden": "Heart of the Warden",
+  "block.wardenofnothing.heart_mound": "Heart Mound",
+
+  "item.wardenofnothing.heart_of_the_warden.dead": "Heart of the Warden (Dead)",
+  "item.wardenofnothing.heart_of_the_warden.faint": "Heart of the Warden (Faint)",
+  "item.wardenofnothing.heart_of_the_warden.alive": "Heart of the Warden (Alive)"
+}

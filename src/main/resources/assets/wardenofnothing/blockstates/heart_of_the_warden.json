@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "stage=dead": { "model": "minecraft:block/sniffer_egg_very_cracked" },
+    "stage=faint": { "model": "minecraft:block/sniffer_egg_slightly_cracked" },
+    "stage=alive": { "model": "minecraft:block/sniffer_egg_not_cracked" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.uiforsquid.wardenofnothing.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "StructureStartMixin",
+    "LevelChunkMixin",
+    "SculkShriekerBlockEntityMixin",
+    "SonicBoomMixin",
+    "WardenMixin",
+    "WardenAiMixin",
+    "WardenClimbMixin",
+    "DiggingMixin",
+    "EntityPortalMixin",
+    "SculkChargeCursorMixin",
+    "ItemEntityMixin",
+    "WardenVibrationUserMixin",
+    "AngerManagementMixin",
+    "AngerLevelMixin",
+    "WardenEntitySensorMixin",
+    "RangedAttributeAccessor"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
