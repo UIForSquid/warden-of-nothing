@@ -2,10 +2,16 @@ modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
 
+# Where players report problems; shown on the crash screen and in the mod list.
+issueTrackerURL="https://github.com/UIForSquid/warden-of-nothing/issues"
+
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
+
+# The mod's home page, linked from the mod list.
+displayURL="https://github.com/UIForSquid/warden-of-nothing"
 authors="${mod_authors}"
 description='''
 Turns the Warden into a boss that belongs to its Ancient City.

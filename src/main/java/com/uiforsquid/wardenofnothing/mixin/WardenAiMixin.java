@@ -24,7 +24,16 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(WardenAi.class)
 public abstract class WardenAiMixin {
 
-    @ModifyConstant(method = {"setDigCooldown", "lambda$static$0"}, constant = @Constant(longValue = 1200L))
+    /**
+     * The setter lambda is matched by its signature, not its compiler-assigned name ({@code lambda$static$0}),
+     * which differs between the dev and production Minecraft jars (production keeps the obfuscated name). It is the only method with this
+     * signature in {@code WardenAi}.
+     */
+    @ModifyConstant(method = {
+            "setDigCooldown",
+            "*(Lnet/minecraft/world/entity/ai/behavior/declarative/BehaviorBuilder$Instance;Lnet/minecraft/world/entity/ai/behavior/declarative/MemoryAccessor;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/monster/warden/Warden;J)Z"},
+            constant = @Constant(longValue = 1200L),
+            require = 2) // both places, so a signature that stops matching fails loudly instead of silently
     private static long wardenofnothing$burrowDelay(long original) {
         return Config.BURROW_DELAY_SECONDS.get() * 20L;
     }

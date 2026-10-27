@@ -31,7 +31,8 @@ repositories {
 }
 
 base {
-    archivesName = mod_id
+    // e.g. wardenofnothing-neoforge-1.21.1-0.1.0.jar: says the loader and game version at a glance.
+    archivesName = "${mod_id}-neoforge-${minecraft_version}"
 }
 
 // Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
