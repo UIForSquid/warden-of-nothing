@@ -44,7 +44,7 @@ public final class WardenTickEvents {
         if (BossWarden.isBoss(cityWarden) && warden.isAlive()) {
             BossBars.update(warden, level);
         } else {
-            BossBars.remove(warden.getUUID());
+            BossBars.remove(warden);
         }
 
         // F8: the home-range supervisor.

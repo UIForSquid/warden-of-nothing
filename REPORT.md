@@ -116,6 +116,7 @@ also dismounts a Warden that somehow ends up riding). All gated by `wardensUnmov
 | `AngerManagementMixin` | `AngerManagement.tick` (`@ModifyConstant`) | anger decay is a hardcoded `-1` |
 | `AngerLevelMixin` | `AngerLevel.byAnger` (HEAD) | the ANGRY threshold is an enum constant |
 | `WardenEntitySensorMixin` | `WardenEntitySensor.radiusXZ/radiusY` | sniff range is hardcoded |
+| `ServerLevelMixin` | `ServerLevel` (`@Unique` field) | each level holds its own city data, so the per-block-change shrieker check is a field read with no static per-dimension map |
 | `RangedAttributeAccessor` | `RangedAttribute.maxValue` (`@Mutable @Accessor`) | vanilla caps max health at 1024 (below the 1500 default), attack damage at 2048 and attack knockback at 5 |
 | `DiggingMixin` | `Digging.stop` (HEAD) | vanilla removes the Warden here with no hook; save health first |
 | `EntityPortalMixin` | `Entity.canUsePortal` (HEAD, Warden-only) | the method is inherited and not overridden by Warden |
@@ -148,8 +149,21 @@ Watch the log reach `Done (…)!` with no mixin/registration errors. (`server.pr
 written: flat world, offline mode, for a quick boot.)
 
 ## Testing
-`./gradlew runGameTestServer` runs 17 GameTests (`gametest/WonGameTests`) headlessly: city recording from a real
+`./gradlew runGameTestServer` runs 21 GameTests (`gametest/WonGameTests`) headlessly: city recording from a real
 Ancient City placement, shrieker removal and chunk-load switching, slot summon/burrow/resummon, the heal curve,
 death/defeat/Heart drop, indestructible Heart item, assignment, boss bar range, home-range forced burrow, dimension-change
-burrow, unmovable, melee scaling, boss sonic boom damage, Heart stages + ritual + mound, pulse absorption, and revival.
+burrow, unmovable, melee scaling, boss sonic boom damage, Heart stages + ritual + mound, pulse absorption, revival,
+and the home-range rules (walk back, timeout, outside-target boom and cooldown, boom charge, return hits) checked
+directly from plain values.
 The same tests run in a dev client with `/test runall`. The Heart (all three stages) is in the Functional Blocks tab.
+
+## Code layout (where the rules live)
+- **City slots**: `data/TrackedCity` owns every slot transition (`sendOut`, `burrow`, `kill`, `claim`) and reports
+  what changed (defeated / revived); callers only switch shriekers, drop the Heart or mark the entity.
+  `WardenSlot` is read-only outside the `data` package.
+- **Natural shrieker index**: private to `data/CityData` (position -> owning city), updated by the same calls that
+  update each city's list. Each `ServerLevel` holds its own `CityData` (`ServerLevelMixin`).
+- **Per-Warden runtime state** (home-range state, boss bar, forced-burrow hold): `warden/WardenRuntime`, held by
+  the Warden entity, so it goes away with the entity; there are no per-Warden static maps to clean up.
+- **Home range**: `home/HomeRangeRules` decides from plain values and returns a verdict; `home/HomeRangeManager`
+  is the adapter that reads the world and applies it.

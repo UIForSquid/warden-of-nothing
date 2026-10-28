@@ -38,6 +38,7 @@ public final class BossWarden {
         setBase(warden, Attributes.ATTACK_DAMAGE, Config.MELEE_DAMAGE.get());
         setBase(warden, Attributes.ARMOR, Config.ARMOR.get());
         setBase(warden, Attributes.KNOCKBACK_RESISTANCE, Config.KNOCKBACK_RESISTANCE.get());
+        setBase(warden, Attributes.EXPLOSION_KNOCKBACK_RESISTANCE, Config.KNOCKBACK_RESISTANCE.get());
         setBase(warden, Attributes.FOLLOW_RANGE, Config.FOLLOW_RANGE.get());
         setBase(warden, Attributes.STEP_HEIGHT, Config.WARDEN_STEP_HEIGHT.get());
     }

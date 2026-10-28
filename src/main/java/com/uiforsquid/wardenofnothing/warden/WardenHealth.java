@@ -1,7 +1,6 @@
 package com.uiforsquid.wardenofnothing.warden;
 
 import com.uiforsquid.wardenofnothing.config.Config;
-import com.uiforsquid.wardenofnothing.data.WardenSlot;
 
 /** The underground healing curve (F3). */
 public final class WardenHealth {
@@ -16,13 +15,13 @@ public final class WardenHealth {
      * Health a burrowed Warden returns at: its remembered health plus a share of the health it was
      * missing when it left, by the exponential curve, capped at max health.
      *
-     * @param slot        the slot being summoned
-     * @param maxHealth   the Warden's (configured) max health
-     * @param nowGameTime the current world game time, in ticks
+     * @param rememberedHealth health saved when it burrowed
+     * @param burrowedAt       game time it burrowed, or -1 if it has never been out
+     * @param maxHealth        the Warden's (configured) max health
+     * @param nowGameTime      the current world game time, in ticks
      */
-    public static float computeSummonHealth(WardenSlot slot, float maxHealth, long nowGameTime) {
-        float remembered = Math.min(slot.getRememberedHealth(), maxHealth);
-        long burrowedAt = slot.getBurrowedAtGameTime();
+    public static float computeSummonHealth(float rememberedHealth, long burrowedAt, float maxHealth, long nowGameTime) {
+        float remembered = Math.min(rememberedHealth, maxHealth);
         if (burrowedAt < 0) {
             // Never been out: sits at remembered (full) health.
             return remembered;

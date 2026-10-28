@@ -47,7 +47,7 @@ public final class BossWardenEvents {
     @SubscribeEvent
     public static void onWardenLeave(EntityLeaveLevelEvent event) {
         if (event.getEntity() instanceof Warden warden) {
-            BossBars.remove(warden.getUUID());
+            BossBars.remove(warden);
         }
     }
 

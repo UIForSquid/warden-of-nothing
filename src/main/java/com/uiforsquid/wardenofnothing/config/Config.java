@@ -31,6 +31,10 @@ public final class Config {
     // ----- Boss stats (changed from vanilla) -----
     public static final ModConfigSpec.BooleanValue BOSS_FOR_OTHER_SPAWNS;
     public static final ModConfigSpec.DoubleValue MAX_HEALTH;
+    public static final ModConfigSpec.DoubleValue WARDEN_ROAR_HEAL;
+    public static final ModConfigSpec.BooleanValue WARDEN_HIT_AFFLICTS;
+    public static final ModConfigSpec.IntValue WARDEN_HIT_NAUSEA_TICKS;
+    public static final ModConfigSpec.IntValue WARDEN_HIT_BLINDNESS_TICKS;
     public static final ModConfigSpec.DoubleValue MELEE_DAMAGE;
     public static final ModConfigSpec.DoubleValue MELEE_DAMAGE_EASY_MULTIPLIER;
     public static final ModConfigSpec.DoubleValue MELEE_DAMAGE_HARD_MULTIPLIER;
@@ -78,7 +82,10 @@ public final class Config {
 
     // ----- Movement abilities -----
     public static final ModConfigSpec.DoubleValue WARDEN_STEP_HEIGHT;
-    public static final ModConfigSpec.BooleanValue WARDEN_CAN_CLIMB;
+    public static final ModConfigSpec.BooleanValue WARDEN_COBWEB_IMMUNE;
+    public static final ModConfigSpec.BooleanValue WARDEN_WEAKEN_NEGATIVE_EFFECTS;
+    public static final ModConfigSpec.DoubleValue WARDEN_NEGATIVE_EFFECT_DURATION_MULTIPLIER;
+    public static final ModConfigSpec.DoubleValue WARDEN_NEGATIVE_EFFECT_AMPLIFIER_MULTIPLIER;
 
     // ----- Shriekers -----
     public static final ModConfigSpec.BooleanValue SHRIEKER_ALERTS_WARDENS;
@@ -99,6 +106,7 @@ public final class Config {
     // ----- Assignment -----
     public static final ModConfigSpec.IntValue MAX_ASSIGNABLE_WARDENS;
     public static final ModConfigSpec.IntValue ASSIGN_CHECK_TICKS;
+    public static final ModConfigSpec.BooleanValue CLAIM_BURROWING_WARDENS;
 
     // ----- Boss bar -----
     public static final ModConfigSpec.EnumValue<BossEvent.BossBarColor> BOSS_BAR_COLOR;
@@ -169,6 +177,27 @@ public final class Config {
                         "Default: 3. Range: 0-100. Takes effect: per boom (live).")
                 .defineInRange("sonicBoomKnockbackMultiplier", 3.0, 0.0, 100.0);
 
+        WARDEN_ROAR_HEAL = b
+                .comment("Health, in half-hearts, a boss Warden heals each time it roars (the roar when it locks onto",
+                        "a target, once per roar). 0 disables. Default: 100. Range: 0-100000. Takes effect: per roar (live).")
+                .defineInRange("wardenRoarHeal", 100.0, 0.0, 100000.0);
+
+        WARDEN_HIT_AFFLICTS = b
+                .comment("When true, a player who is hit by a boss Warden's melee and survives is afflicted with the",
+                        "nausea and blindness below. Takes effect: per hit (live).",
+                        "Default: true.")
+                .define("wardenHitAfflicts", true);
+
+        WARDEN_HIT_NAUSEA_TICKS = b
+                .comment("Ticks of Nausea applied to a player who survives a boss Warden's melee hit. 20 ticks = 1",
+                        "second. 0 disables the nausea. Default: 20. Range: 0-6000. Takes effect: per hit (live).")
+                .defineInRange("wardenHitNauseaTicks", 20, 0, 6000);
+
+        WARDEN_HIT_BLINDNESS_TICKS = b
+                .comment("Ticks of Blindness applied to a player who survives a boss Warden's melee hit. 20 ticks = 1",
+                        "second. 0 disables the blindness. Default: 10. Range: 0-6000. Takes effect: per hit (live).")
+                .defineInRange("wardenHitBlindnessTicks", 10, 0, 6000);
+
         b.pop();
 
         // =====================================================================
@@ -182,9 +211,10 @@ public final class Config {
                 .defineInRange("armor", 0.0, 0.0, 30.0);
 
         KNOCKBACK_RESISTANCE = b
-                .comment("Knockback resistance. 1.0 = cannot be knocked back. Vanilla Warden is 1.0.",
-                        "Default: 1.0. Range: 0-1. Takes effect: for Wardens spawned or summoned after the change")
-                .defineInRange("knockbackResistance", 1.0, 0.0, 1.0);
+                .comment("Knockback resistance, applied to both normal and explosion knockback. 1.0 = cannot be",
+                        "knocked back by anything; 0.9 = 90% immune from every source. Vanilla Warden is 1.0.",
+                        "Default: 0.9. Range: 0-1. Takes effect: for Wardens spawned or summoned after the change")
+                .defineInRange("knockbackResistance", 0.9, 0.0, 1.0);
 
         MELEE_COOLDOWN = b
                 .comment("Ticks between melee attacks. Vanilla Warden is 18 (20 ticks = 1 second).",
@@ -353,10 +383,31 @@ public final class Config {
                         "Default: 2.0. Range: 0.0-10.0 blocks. Takes effect: for Wardens spawned or summoned after the change")
                 .defineInRange("wardenStepHeight", 2.0, 0.0, 10.0);
 
-        WARDEN_CAN_CLIMB = b
-                .comment("When true, a Warden climbs walls like a spider: pressed against a wall, it climbs straight up.",
+        b.pop();
+
+        // =====================================================================
+        b.push("immunities");
+
+        WARDEN_COBWEB_IMMUNE = b
+                .comment("When true, a boss Warden is immune to cobwebs: they neither slow nor hold it.",
                         "Default: true. Takes effect: live.")
-                .define("wardenCanClimb", true);
+                .define("wardenCobwebImmune", true);
+
+        WARDEN_WEAKEN_NEGATIVE_EFFECTS = b
+                .comment("When true, negative (harmful) potion effects applied to a boss Warden are weakened by the",
+                        "duration and amplifier multipliers below. Beneficial and neutral effects are untouched.",
+                        "Default: true. Takes effect: live (for effects applied after the change).")
+                .define("wardenWeakenNegativeEffects", true);
+
+        WARDEN_NEGATIVE_EFFECT_DURATION_MULTIPLIER = b
+                .comment("Multiplier on the duration of a negative effect applied to a boss Warden. 0.5 = half the time.",
+                        "Infinite-duration effects are left alone. Default: 0.5. Range: 0-1. Takes effect: live.")
+                .defineInRange("wardenNegativeEffectDurationMultiplier", 0.5, 0.0, 1.0);
+
+        WARDEN_NEGATIVE_EFFECT_AMPLIFIER_MULTIPLIER = b
+                .comment("Multiplier on the strength (amplifier) of a negative effect applied to a boss Warden. 0.5 =",
+                        "half strength. Floored, so a level-I effect stays level I. Default: 0.5. Range: 0-1. Takes effect: live.")
+                .defineInRange("wardenNegativeEffectAmplifierMultiplier", 0.5, 0.0, 1.0);
 
         b.pop();
 
@@ -447,6 +498,14 @@ public final class Config {
                 .comment("How often the mod looks for Wardens tagged wardenofnothing.assigned (20 ticks = 1 second).",
                         "Default: 20. Range: 1-200 ticks. Takes effect: live.")
                 .defineInRange("assignCheckTicks", 20, 1, 200);
+
+        CLAIM_BURROWING_WARDENS = b
+                .comment("When true, an Unassigned Warden that burrows inside a city with no living Warden is claimed",
+                        "as that city's Warden (it fills a burrowed slot), so the city is no longer defeated and its",
+                        "shriekers switch back on. Lets an op revive a city just by adding a Warden (egg or command)",
+                        "to it and letting it burrow.",
+                        "Default: true. Takes effect: live.")
+                .define("claimBurrowingWardens", true);
 
         b.pop();
 

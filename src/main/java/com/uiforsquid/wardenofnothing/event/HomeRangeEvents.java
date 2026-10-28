@@ -7,12 +7,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 
 /**
- * F8 wiring: the returning hit counter and state cleanup. The per-tick supervisor is driven from
- * {@link WardenTickEvents}.
+ * F8 wiring: the returning hit counter. The per-tick supervisor is driven from {@link WardenTickEvents};
+ * the home-range state lives on the Warden (see {@code WardenRuntime}), so there is nothing to clean up.
  */
 @EventBusSubscriber(modid = WardenOfNothing.MOD_ID)
 public final class HomeRangeEvents {
@@ -28,13 +27,6 @@ public final class HomeRangeEvents {
                 && warden.level() instanceof ServerLevel
                 && CityWardens.isCityWarden(warden)) {
             HomeRangeManager.onDamagedWhileReturning(warden);
-        }
-    }
-
-    @SubscribeEvent
-    public static void onWardenLeave(EntityLeaveLevelEvent event) {
-        if (event.getEntity() instanceof Warden warden) {
-            HomeRangeManager.forget(warden.getUUID());
         }
     }
 }

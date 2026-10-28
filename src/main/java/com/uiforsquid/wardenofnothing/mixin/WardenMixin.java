@@ -3,10 +3,14 @@ package com.uiforsquid.wardenofnothing.mixin;
 import com.uiforsquid.wardenofnothing.config.Config;
 import com.uiforsquid.wardenofnothing.warden.BossWarden;
 import com.uiforsquid.wardenofnothing.warden.BurrowingWarden;
+import com.uiforsquid.wardenofnothing.warden.WardenRuntime;
 import java.util.Collections;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -53,9 +57,17 @@ public abstract class WardenMixin implements BurrowingWarden {
     @Shadow
     protected abstract void syncClientAngerLevel();
 
-    /** True from a forced burrow until the dig animation starts. Runtime-only, like the rest of F3's forced state. */
+    /** The mod's runtime state for this Warden; see {@link WardenRuntime}. Created on first use, never saved. */
     @Unique
-    private boolean wardenofnothing$forcingBurrow;
+    private WardenRuntime wardenofnothing$runtime;
+
+    @Override
+    public WardenRuntime wardenofnothing$runtime() {
+        if (this.wardenofnothing$runtime == null) {
+            this.wardenofnothing$runtime = WardenRuntime.create();
+        }
+        return this.wardenofnothing$runtime;
+    }
 
     @Inject(method = "doHurtTarget", at = @At("HEAD"))
     private void wardenofnothing$scaleMelee(Entity target, CallbackInfoReturnable<Boolean> cir) {
@@ -66,6 +78,35 @@ public abstract class WardenMixin implements BurrowingWarden {
         AttributeInstance instance = self.getAttribute(Attributes.ATTACK_DAMAGE);
         if (instance != null) {
             instance.setBaseValue(BossWarden.scaledMeleeDamage(level.getDifficulty()));
+        }
+    }
+
+    /**
+     * A player who is hit by a boss Warden's melee and survives is afflicted with brief nausea and
+     * blindness (defaults 1s / 0.5s). Injected at RETURN so the hit (and its damage) has already
+     * resolved: {@code isDeadOrDying()} then tells a survivor from a kill, and the boolean return tells a
+     * landed hit from a missed one.
+     */
+    @Inject(method = "doHurtTarget", at = @At("RETURN"))
+    private void wardenofnothing$afflictSurvivor(Entity target, CallbackInfoReturnable<Boolean> cir) {
+        if (!cir.getReturnValueZ()) {
+            return; // the hit didn't land
+        }
+        Warden self = (Warden) (Object) this;
+        if (!(self.level() instanceof ServerLevel) || !BossWarden.isBoss(self)
+                || !Config.WARDEN_HIT_AFFLICTS.get()) {
+            return;
+        }
+        if (!(target instanceof Player player) || player.isDeadOrDying()) {
+            return;
+        }
+        int nausea = Config.WARDEN_HIT_NAUSEA_TICKS.get();
+        if (nausea > 0) {
+            player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, nausea, 0));
+        }
+        int blindness = Config.WARDEN_HIT_BLINDNESS_TICKS.get();
+        if (blindness > 0) {
+            player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, blindness, 0));
         }
     }
 
@@ -104,17 +145,18 @@ public abstract class WardenMixin implements BurrowingWarden {
         // Drop all anger so the brain runs DIG instead of ROAR/FIGHT on its next tick.
         this.angerManagement = new AngerManagement(self::canTargetEntity, Collections.emptyList());
         this.syncClientAngerLevel();
-        this.wardenofnothing$forcingBurrow = true;
+        this.wardenofnothing$runtime().setForcingBurrow(true);
     }
 
     @Override
     public void wardenofnothing$tickForcedBurrow() {
-        if (!this.wardenofnothing$forcingBurrow) {
+        WardenRuntime runtime = this.wardenofnothing$runtime();
+        if (!runtime.isForcingBurrow()) {
             return;
         }
         Warden self = (Warden) (Object) this;
         if (self.hasPose(Pose.DIGGING) || self.isRemoved()) {
-            this.wardenofnothing$forcingBurrow = false;
+            runtime.setForcingBurrow(false);
             return;
         }
         // Undo anything that would keep the brain out of DIG (a vibration refreshing the dig cooldown,

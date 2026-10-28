@@ -5,10 +5,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -19,35 +16,25 @@ import net.minecraft.world.entity.monster.warden.Warden;
 /**
  * F1 boss bar: one vanilla boss bar per boss Warden, shown to players inside a cylinder around it
  * (horizontal radius {@code bossBarRangeHorizontal}, vertical half-height {@code bossBarRangeVertical}).
- * Bars are kept in a runtime map (not saved) and updated each server tick, without allocating in the
- * common case.
+ * The bar lives in the Warden's {@link WardenRuntime} (not saved) and is updated each server tick,
+ * without allocating in the common case.
  */
 public final class BossBars {
-
-    private static final Map<UUID, Bar> BARS = new ConcurrentHashMap<>();
-
-    /** A bar plus the config text its name was last built from, so the name is only rebuilt on change. */
-    private static final class Bar {
-        final ServerBossEvent event;
-        String text;
-
-        Bar(String text) {
-            this.text = text;
-            this.event = new ServerBossEvent(Component.literal(text), Config.BOSS_BAR_COLOR.get(), BossEvent.BossBarOverlay.PROGRESS);
-        }
-    }
 
     private BossBars() {
     }
 
     /** Called each server tick for a boss Warden: refreshes its bar's text, colour, health and viewers. */
     public static void update(Warden warden, ServerLevel level) {
-        Bar entry = BARS.computeIfAbsent(warden.getUUID(), id -> new Bar(Config.BOSS_BAR_TEXT.get()));
-        ServerBossEvent bar = entry.event;
-
+        WardenRuntime runtime = WardenRuntime.of(warden);
         String text = Config.BOSS_BAR_TEXT.get();
-        if (!text.equals(entry.text)) {
-            entry.text = text;
+        ServerBossEvent bar = runtime.bossBar;
+        if (bar == null) {
+            bar = new ServerBossEvent(Component.literal(text), Config.BOSS_BAR_COLOR.get(), BossEvent.BossBarOverlay.PROGRESS);
+            runtime.bossBar = bar;
+            runtime.bossBarText = text;
+        } else if (!text.equals(runtime.bossBarText)) {
+            runtime.bossBarText = text;
             bar.setName(Component.literal(text));
         }
         bar.setColor(Config.BOSS_BAR_COLOR.get());
@@ -86,24 +73,18 @@ public final class BossBars {
     }
 
     /** The players currently shown a Warden's bar (empty if it has none). Read-only; used by the GameTests. */
-    public static Collection<ServerPlayer> viewersOf(UUID wardenId) {
-        Bar entry = BARS.get(wardenId);
-        return entry == null ? List.of() : entry.event.getPlayers();
+    public static Collection<ServerPlayer> viewersOf(Warden warden) {
+        ServerBossEvent bar = WardenRuntime.of(warden).bossBar;
+        return bar == null ? List.of() : bar.getPlayers();
     }
 
-    /** Hides and drops every bar (server stopping), so nothing leaks into the next world. */
-    public static void clear() {
-        for (Bar entry : BARS.values()) {
-            entry.event.removeAllPlayers();
-        }
-        BARS.clear();
-    }
-
-    /** Removes and hides a Warden's bar (on death, unload, or when it is no longer a boss). */
-    public static void remove(UUID wardenId) {
-        Bar entry = BARS.remove(wardenId);
-        if (entry != null) {
-            entry.event.removeAllPlayers();
+    /** Hides and drops a Warden's bar (it left the world, died, or is no longer a boss). */
+    public static void remove(Warden warden) {
+        WardenRuntime runtime = WardenRuntime.of(warden);
+        if (runtime.bossBar != null) {
+            runtime.bossBar.removeAllPlayers();
+            runtime.bossBar = null;
+            runtime.bossBarText = null;
         }
     }
 }

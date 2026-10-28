@@ -3,14 +3,14 @@ package com.uiforsquid.wardenofnothing.event;
 import com.uiforsquid.wardenofnothing.WardenOfNothing;
 import com.uiforsquid.wardenofnothing.city.CityShriekers;
 import com.uiforsquid.wardenofnothing.city.CityTracker;
-import com.uiforsquid.wardenofnothing.data.CityData;
-import com.uiforsquid.wardenofnothing.data.SlotState;
 import com.uiforsquid.wardenofnothing.data.TrackedCity;
-import com.uiforsquid.wardenofnothing.data.WardenSlot;
+import com.uiforsquid.wardenofnothing.reg.WonItems;
 import com.uiforsquid.wardenofnothing.warden.CityWardenRef;
 import com.uiforsquid.wardenofnothing.warden.CityWardens;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.monster.warden.Warden;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -38,24 +38,14 @@ public final class WardenCityEvents {
         if (ref == null) {
             return; // Unassigned Warden: ignored by all city logic.
         }
-        CityData data = CityTracker.get(level);
-        TrackedCity city = data.getCity(ref.cityId());
-        WardenSlot slot = city == null ? null : city.outSlotOf(ref.slotIndex(), warden.getUUID());
-        if (slot == null) {
-            return; // stale Warden: its slot is no longer held by it
+        TrackedCity city = CityTracker.get(level).getCity(ref.cityId());
+        if (city == null || city.kill(ref.slotIndex(), warden.getUUID()) != TrackedCity.Death.DEFEATED) {
+            return; // a stale Warden (its slot is no longer held by it), or the city still has a Warden
         }
-        slot.setState(SlotState.DEAD);
-        slot.setOutWardenId(null);
-        data.setDirty();
-
-        if (city.isDefeated()) {
-            // Every slot is now dead: the city is defeated, so its natural shriekers stop summoning.
-            CityShriekers.refreshLoaded(level, city);
-            // F5: the last registered Warden (whose death defeats the city) drops a Heart (Dead).
-            net.minecraft.world.level.block.Block.popResource(
-                    level, warden.blockPosition(),
-                    new net.minecraft.world.item.ItemStack(com.uiforsquid.wardenofnothing.reg.WonItems.HEART.get()));
-        }
+        // Every slot is now dead: the city is defeated, so its natural shriekers stop summoning.
+        CityShriekers.refreshLoaded(level, city);
+        // F5: the last registered Warden (whose death defeats the city) drops a Heart (Dead).
+        Block.popResource(level, warden.blockPosition(), new ItemStack(WonItems.HEART.get()));
     }
 
     @SubscribeEvent

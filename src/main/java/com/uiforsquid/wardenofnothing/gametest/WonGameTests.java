@@ -25,6 +25,7 @@ import com.uiforsquid.wardenofnothing.warden.WardenHealth;
 import com.uiforsquid.wardenofnothing.warden.WardenSummoner;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import java.util.List;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
@@ -57,6 +58,9 @@ import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
 import com.uiforsquid.wardenofnothing.warden.BossWarden;
+import com.uiforsquid.wardenofnothing.home.HomeRangeRules;
+import com.uiforsquid.wardenofnothing.home.WardenHomeState;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -98,10 +102,19 @@ public final class WonGameTests {
         return city;
     }
 
+    /** Kills every slot through the City's own transitions (sending burrowed ones out first). */
     private static void defeat(TrackedCity city) {
-        for (WardenSlot slot : city.getSlots()) {
-            slot.setState(SlotState.DEAD);
-            slot.setOutWardenId(null);
+        for (int i = 0; i < city.getSlots().size(); i++) {
+            WardenSlot slot = city.getSlots().get(i);
+            if (slot.getState() == SlotState.BURROWED) {
+                city.sendOut(i, UUID.randomUUID());
+            }
+            if (slot.getState() == SlotState.OUT) {
+                city.kill(i, slot.getOutWardenId());
+            }
+        }
+        if (!city.isDefeated()) {
+            throw new AssertionError("test setup: city not defeated");
         }
     }
 
@@ -231,9 +244,9 @@ public final class WonGameTests {
         assertClose(h, 0.5, WardenHealth.healedShare(5.0, 10.0, 0.0), "linear half");
         h.assertTrue(WardenHealth.healedShare(5.0, 10.0, 3.0) < 0.5, "steep curve isn't back-loaded");
 
-        WardenSlot slot = new WardenSlot(SlotState.BURROWED, 100.0F, 0L, null);
         long tenMinutes = Config.FULL_HEAL_MINUTES.get() * 1200L;
-        assertClose(h, 1000.0, WardenHealth.computeSummonHealth(slot, 1000.0F, tenMinutes), "fully healed after fullHealMinutes");
+        assertClose(h, 1000.0, WardenHealth.computeSummonHealth(100.0F, 0L, 1000.0F, tenMinutes), "fully healed after fullHealMinutes");
+        assertClose(h, 100.0, WardenHealth.computeSummonHealth(100.0F, -1L, 1000.0F, tenMinutes), "never-out slot keeps remembered health");
         h.succeed();
     }
 
@@ -301,10 +314,10 @@ public final class WonGameTests {
         player.teleportTo(warden.getX() + 2.0, warden.getY(), warden.getZ());
 
         h.runAfterDelay(2, () -> {
-            h.assertTrue(BossBars.viewersOf(warden.getUUID()).contains(player), "player in range doesn't see the bar");
+            h.assertTrue(BossBars.viewersOf(warden).contains(player), "player in range doesn't see the bar");
             player.teleportTo(warden.getX() + Config.BOSS_BAR_RANGE_HORIZONTAL.get() + 10.0, warden.getY(), warden.getZ());
             h.runAfterDelay(2, () -> {
-                h.assertFalse(BossBars.viewersOf(warden.getUUID()).contains(player), "player out of range still sees the bar");
+                h.assertFalse(BossBars.viewersOf(warden).contains(player), "player out of range still sees the bar");
                 warden.discard();
                 player.discard();
                 h.succeed();
@@ -324,8 +337,7 @@ public final class WonGameTests {
         // only the forced burrow can make it dig.
         warden.getBrain().setMemoryWithExpiry(MemoryModuleType.DIG_COOLDOWN, Unit.INSTANCE, 24000L);
         WardenSlot slot = city.getSlots().get(0);
-        slot.setState(SlotState.OUT);
-        slot.setOutWardenId(warden.getUUID());
+        city.sendOut(0, warden.getUUID());
         CityWardens.mark(warden, city.getId(), 0);
 
         h.succeedWhen(() -> {
@@ -333,6 +345,109 @@ public final class WonGameTests {
                     "not burrowed yet (pose " + warden.getPose() + ", removed " + warden.isRemoved() + ")");
             h.assertTrue(warden.isRemoved(), "slot burrowed but the Warden is still in the world");
         });
+    }
+
+    // ----- F8 home-range rules (plain values: no Warden, no ticking) -----
+
+    /** A city 100x50x100 at the origin, and its home range (124 out on the sides and up, unbounded down). */
+    private static final BoundingBox RULE_CITY = new BoundingBox(0, 0, 0, 99, 49, 99);
+    private static final BoundingBox RULE_HOME = new BoundingBox(-124, -64, -124, 223, 173, 223);
+    /** checkTicks 20, hit reset 600, 3 hits, walk back 32 blocks / 600 ticks, boom charge 34 / cooldown 40. */
+    private static final HomeRangeRules.Settings RULES = new HomeRangeRules.Settings(20, 600, 3, 32.0, 600L, 34L, 40L);
+
+    private static HomeRangeRules.Situation at(long now, Vec3 pos) {
+        return new HomeRangeRules.Situation(now, pos, RULE_CITY, RULE_HOME, null, null, () -> false, null);
+    }
+
+    /** Far outside burrows at once; just outside walks back to the nearest point in the city, then burrows on timeout. */
+    @GameTest(templateNamespace = NS, template = FLOOR)
+    public static void homeRulesWalkBackOrBurrow(GameTestHelper h) {
+        h.assertTrue(HomeRangeRules.check(new WardenHomeState(), at(0L, new Vec3(500, 10, 50)), RULES).burrow(),
+                "far outside the home range didn't burrow");
+
+        WardenHomeState st = new WardenHomeState();
+        HomeRangeRules.Verdict walk = HomeRangeRules.check(st, at(100L, new Vec3(230, 10, 50)), RULES);
+        h.assertFalse(walk.burrow(), "just outside the home range burrowed instead of walking back");
+        h.assertTrue(st.returning, "walking back isn't returning");
+        h.assertTrue(new Vec3(99.5, 10, 50).equals(walk.walkTo()), "walk target isn't the nearest point inside the city: " + walk.walkTo());
+        h.assertFalse(HomeRangeRules.check(st, at(100L + 600L, new Vec3(230, 10, 50)), RULES).burrow(), "burrowed before the timeout");
+        h.assertTrue(HomeRangeRules.check(st, at(100L + 601L, new Vec3(230, 10, 50)), RULES).burrow(), "didn't burrow after the walk-back timeout");
+
+        // Back inside the home range but outside the city: keeps walking in; inside the city: stops returning.
+        WardenHomeState back = new WardenHomeState();
+        back.returning = true;
+        h.assertTrue(HomeRangeRules.check(back, at(0L, new Vec3(150, 10, 50)), RULES).walkTo() != null, "stopped walking home early");
+        h.assertTrue(HomeRangeRules.check(back, at(20L, new Vec3(50, 10, 50)), RULES).walkTo() == null, "still walking once home");
+        h.assertFalse(back.returning, "still returning once inside the city");
+        h.succeed();
+    }
+
+    /** An angry target outside the home range is given up, and boomed once per cooldown if in reach; a target that leaves is given up. */
+    @GameTest(templateNamespace = NS, template = FLOOR)
+    public static void homeRulesOutsideTargets(GameTestHelper h) {
+        UUID id = UUID.randomUUID();
+        Vec3 outside = new Vec3(300, 10, 50);
+        Vec3 pos = new Vec3(200, 10, 50);
+        WardenHomeState st = new WardenHomeState();
+
+        HomeRangeRules.Verdict first = HomeRangeRules.check(st,
+                new HomeRangeRules.Situation(0L, pos, RULE_CITY, RULE_HOME, id, outside, () -> true, null), RULES);
+        h.assertTrue(id.equals(first.startBoomAt()), "no boom at an outside target in reach");
+        h.assertTrue(first.giveUpAngryTarget() && st.returning, "outside target not given up");
+        h.assertTrue(st.boomFireAt == 34L && st.boomCooldownUntil == 40L, "charge/cooldown not scheduled");
+
+        st.boomTargetId = null; // as if it fired
+        h.assertTrue(HomeRangeRules.check(st,
+                new HomeRangeRules.Situation(20L, pos, RULE_CITY, RULE_HOME, id, outside, () -> true, null), RULES).startBoomAt() == null,
+                "boomed again inside the cooldown");
+        h.assertTrue(id.equals(HomeRangeRules.check(st,
+                new HomeRangeRules.Situation(40L, pos, RULE_CITY, RULE_HOME, id, outside, () -> true, null), RULES).startBoomAt()),
+                "no boom once the cooldown passed");
+        h.assertTrue(HomeRangeRules.check(new WardenHomeState(),
+                new HomeRangeRules.Situation(0L, pos, RULE_CITY, RULE_HOME, id, outside, () -> false, null), RULES).startBoomAt() == null,
+                "boomed at a target out of reach");
+
+        HomeRangeRules.Verdict left = HomeRangeRules.check(new WardenHomeState(),
+                new HomeRangeRules.Situation(0L, new Vec3(50, 10, 50), RULE_CITY, RULE_HOME, null, null, () -> false, outside), RULES);
+        h.assertTrue(left.giveUpTarget(), "a target that left the home range wasn't given up");
+        h.succeed();
+    }
+
+    /** A charging boom waits out its charge, then fires if the target is still in reach (or fizzles); either way the Warden returns. */
+    @GameTest(templateNamespace = NS, template = FLOOR)
+    public static void homeRulesBoomCharge(GameTestHelper h) {
+        h.assertTrue(HomeRangeRules.stepBoom(new WardenHomeState(), 0L, () -> true) == HomeRangeRules.BoomStep.NONE, "not charging, but stepped");
+        WardenHomeState st = new WardenHomeState();
+        st.boomTargetId = UUID.randomUUID();
+        st.boomFireAt = 34L;
+        h.assertTrue(HomeRangeRules.stepBoom(st, 33L, () -> true) == HomeRangeRules.BoomStep.CHARGING, "fired early");
+        h.assertTrue(HomeRangeRules.stepBoom(st, 34L, () -> true) == HomeRangeRules.BoomStep.FIRE, "didn't fire on time");
+        h.assertTrue(st.boomTargetId == null && st.returning, "fired boom left the charge pending or the Warden not returning");
+
+        WardenHomeState gone = new WardenHomeState();
+        gone.boomTargetId = UUID.randomUUID();
+        gone.boomFireAt = 34L;
+        h.assertTrue(HomeRangeRules.stepBoom(gone, 34L, () -> false) == HomeRangeRules.BoomStep.FIZZLE, "fired at a target out of reach");
+        h.succeed();
+    }
+
+    /** Hits while returning count up to a burrow; hits while not returning don't; time inside the city resets the count. */
+    @GameTest(templateNamespace = NS, template = FLOOR)
+    public static void homeRulesReturnHits(GameTestHelper h) {
+        WardenHomeState st = new WardenHomeState();
+        h.assertFalse(HomeRangeRules.hitWhileReturning(st, 3), "counted a hit while not returning");
+        st.returning = true;
+        h.assertFalse(HomeRangeRules.hitWhileReturning(st, 3), "burrowed after 1 hit");
+        h.assertFalse(HomeRangeRules.hitWhileReturning(st, 3), "burrowed after 2 hits");
+        h.assertTrue(HomeRangeRules.hitWhileReturning(st, 3), "didn't burrow at the hit limit");
+
+        WardenHomeState inside = new WardenHomeState();
+        inside.returnHits = 2;
+        for (long t = 0; t < 600; t += 20) {
+            HomeRangeRules.check(inside, at(t, new Vec3(50, 10, 50)), RULES);
+        }
+        h.assertTrue(inside.returnHits == 0, "hit counter didn't reset after returnHitResetSeconds inside the city");
+        h.succeed();
     }
 
     // ----- F9 unmovable -----

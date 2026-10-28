@@ -2,10 +2,7 @@ package com.uiforsquid.wardenofnothing.heart;
 
 import com.uiforsquid.wardenofnothing.city.CityShriekers;
 import com.uiforsquid.wardenofnothing.city.CityTracker;
-import com.uiforsquid.wardenofnothing.data.CityData;
-import com.uiforsquid.wardenofnothing.data.SlotState;
 import com.uiforsquid.wardenofnothing.data.TrackedCity;
-import com.uiforsquid.wardenofnothing.data.WardenSlot;
 import com.uiforsquid.wardenofnothing.reg.WonBlocks;
 import com.uiforsquid.wardenofnothing.warden.BossWarden;
 import com.uiforsquid.wardenofnothing.warden.CityWardens;
@@ -80,8 +77,7 @@ public final class HeartMound {
 
     /** The 10-minute revival: a brand-new Warden_1 climbs out, with a server-wide roar. */
     public static void revive(ServerLevel level, BlockPos centre, long cityId) {
-        CityData data = CityTracker.get(level);
-        TrackedCity city = data.getCity(cityId);
+        TrackedCity city = CityTracker.get(level).getCity(cityId);
         if (city == null) {
             return;
         }
@@ -96,17 +92,9 @@ public final class HeartMound {
         BossWarden.applyStats(warden);
         warden.setHealth(warden.getMaxHealth());
 
-        WardenSlot slot = city.getSlots().isEmpty() ? null : city.getSlots().get(0);
-        if (slot == null) {
-            slot = WardenSlot.newBurrowed(warden.getMaxHealth());
-            city.getSlots().add(slot);
-        }
-        slot.setState(SlotState.OUT);
-        slot.setRememberedHealth(warden.getMaxHealth());
-        slot.setBurrowedAtGameTime(-1L);
-        slot.setOutWardenId(warden.getUUID());
-        CityWardens.mark(warden, cityId, 0);
-        data.setDirty();
+        // Warden_1's slot in a defeated city (the lowest dead one), or a new slot if it has been refilled since.
+        TrackedCity.Claim claim = city.claim(warden.getUUID(), warden.getMaxHealth(), level.getGameTime());
+        CityWardens.mark(warden, cityId, claim.slotIndex());
 
         CityShriekers.refreshLoaded(level, city); // respawn routine: shriekers switch back on
 

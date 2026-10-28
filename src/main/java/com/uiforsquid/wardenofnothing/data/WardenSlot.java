@@ -10,6 +10,9 @@ import net.minecraft.nbt.CompoundTag;
  *
  * <p>Slot numbers are internal; players only ever see Wardens. The slot's index in the city's list
  * is its number minus one.
+ *
+ * <p>Read-only outside this package: every state change goes through {@link TrackedCity}, which owns
+ * the slot rules (one OUT Warden per slot, lowest-numbered first, defeat when all are dead).
  */
 public final class WardenSlot {
 
@@ -25,7 +28,7 @@ public final class WardenSlot {
     @Nullable
     private UUID outWardenId;
 
-    public WardenSlot(SlotState state, float rememberedHealth, long burrowedAtGameTime, @Nullable UUID outWardenId) {
+    WardenSlot(SlotState state, float rememberedHealth, long burrowedAtGameTime, @Nullable UUID outWardenId) {
         this.state = state;
         this.rememberedHealth = rememberedHealth;
         this.burrowedAtGameTime = burrowedAtGameTime;
@@ -33,7 +36,7 @@ public final class WardenSlot {
     }
 
     /** A brand-new slot: burrowed, full health, never been out. */
-    public static WardenSlot newBurrowed(float maxHealth) {
+    static WardenSlot newBurrowed(float maxHealth) {
         return new WardenSlot(SlotState.BURROWED, maxHealth, -1L, null);
     }
 
@@ -41,7 +44,7 @@ public final class WardenSlot {
         return state;
     }
 
-    public void setState(SlotState state) {
+    void setState(SlotState state) {
         this.state = state;
     }
 
@@ -49,7 +52,7 @@ public final class WardenSlot {
         return rememberedHealth;
     }
 
-    public void setRememberedHealth(float rememberedHealth) {
+    void setRememberedHealth(float rememberedHealth) {
         this.rememberedHealth = rememberedHealth;
     }
 
@@ -58,7 +61,7 @@ public final class WardenSlot {
         return burrowedAtGameTime;
     }
 
-    public void setBurrowedAtGameTime(long burrowedAtGameTime) {
+    void setBurrowedAtGameTime(long burrowedAtGameTime) {
         this.burrowedAtGameTime = burrowedAtGameTime;
     }
 
@@ -67,11 +70,11 @@ public final class WardenSlot {
         return outWardenId;
     }
 
-    public void setOutWardenId(@Nullable UUID outWardenId) {
+    void setOutWardenId(@Nullable UUID outWardenId) {
         this.outWardenId = outWardenId;
     }
 
-    public CompoundTag save() {
+    CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("state", state.name());
         tag.putFloat("rememberedHealth", rememberedHealth);
@@ -82,7 +85,7 @@ public final class WardenSlot {
         return tag;
     }
 
-    public static WardenSlot load(CompoundTag tag) {
+    static WardenSlot load(CompoundTag tag) {
         SlotState state;
         try {
             state = SlotState.valueOf(tag.getString("state"));

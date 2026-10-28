@@ -20,6 +20,9 @@ public interface BurrowingWarden {
      */
     void wardenofnothing$tickForcedBurrow();
 
+    /** The mod's runtime state for this Warden (see {@link WardenRuntime#of}). */
+    WardenRuntime wardenofnothing$runtime();
+
     /**
      * Drops all of the Warden's anger and its attack/roar targets, so a returning City Warden ignores
      * everything on the way home (F8). The outside-target sonic boom is driven separately by the mod.

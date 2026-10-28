@@ -10,7 +10,9 @@
     "SonicBoomMixin",
     "WardenMixin",
     "WardenAiMixin",
-    "WardenClimbMixin",
+    "RoarMixin",
+    "WebBlockMixin",
+    "WardenPotionMixin",
     "DiggingMixin",
     "EntityPortalMixin",
     "SculkChargeCursorMixin",
@@ -19,7 +21,8 @@
     "AngerManagementMixin",
     "AngerLevelMixin",
     "WardenEntitySensorMixin",
-    "RangedAttributeAccessor"
+    "RangedAttributeAccessor",
+    "ServerLevelMixin"
   ],
   "client": [],
   "server": [],

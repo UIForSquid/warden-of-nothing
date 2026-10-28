@@ -2,12 +2,10 @@ package com.uiforsquid.wardenofnothing.warden;
 
 import com.uiforsquid.wardenofnothing.city.CityTracker;
 import com.uiforsquid.wardenofnothing.config.Config;
-import com.uiforsquid.wardenofnothing.data.CityData;
-import com.uiforsquid.wardenofnothing.data.SlotState;
 import com.uiforsquid.wardenofnothing.data.TrackedCity;
-import com.uiforsquid.wardenofnothing.data.WardenSlot;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,17 +34,11 @@ public final class WardenSummoner {
      * </ul>
      */
     public static boolean summonFromSlot(ServerLevel level, BlockPos shriekerPos) {
-        CityData data = CityTracker.get(level);
-        TrackedCity city = data.findCityContaining(shriekerPos);
+        TrackedCity city = CityTracker.findCity(level, shriekerPos);
         if (city == null || city.isDefeated()) {
             return false;
         }
-        // Self-heal partial recording: ensure this shrieker is one of the city's recorded shriekers,
-        // so it is switched off with the rest when the city is defeated (it may not have been recorded
-        // at generation if its chunk generated before the city was tracked).
-        CityTracker.recordChunk(level, city.getId(), city.getBounds(),
-                new LongArrayList(new long[]{shriekerPos.asLong()}));
-        int index = city.lowestBurrowedSlotIndex();
+        int index = city.summonableSlot();
         if (index < 0) {
             return false;
         }
@@ -61,16 +53,10 @@ public final class WardenSummoner {
         Warden warden = spawned.get();
         // City Wardens are always bosses, regardless of bossForOtherSpawns.
         BossWarden.applyStats(warden);
-        WardenSlot slot = city.getSlots().get(index);
         float maxHealth = warden.getMaxHealth();
-        float health = WardenHealth.computeSummonHealth(slot, maxHealth, level.getGameTime());
-        warden.setHealth(Math.min(health, maxHealth));
-
+        warden.setHealth(Math.min(city.summonHealth(index, maxHealth, level.getGameTime()), maxHealth));
         CityWardens.mark(warden, city.getId(), index);
-        slot.setState(SlotState.OUT);
-        slot.setOutWardenId(warden.getUUID());
-        slot.setBurrowedAtGameTime(-1L);
-        data.setDirty();
+        city.sendOut(index, warden.getUUID());
         return true;
     }
 
@@ -88,11 +74,8 @@ public final class WardenSummoner {
         if (city == null || city.isDefeated()) {
             return;
         }
-        for (WardenSlot slot : city.getSlots()) {
-            if (slot.getState() != SlotState.OUT || slot.getOutWardenId() == null) {
-                continue;
-            }
-            if (level.getEntity(slot.getOutWardenId()) instanceof Warden warden) {
+        for (UUID wardenId : city.outWardenIds()) {
+            if (level.getEntity(wardenId) instanceof Warden warden) {
                 // Anger first: increaseAngerAt can clear a non-player attack target, so set it after.
                 warden.increaseAngerAt(player, AngerLevel.ANGRY.getMinimumAnger() + 20, true);
                 warden.setAttackTarget(player);

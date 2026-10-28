@@ -1,10 +1,10 @@
 package com.uiforsquid.wardenofnothing.city;
 
+import com.uiforsquid.wardenofnothing.data.CityData;
 import com.uiforsquid.wardenofnothing.data.TrackedCity;
 import it.unimi.dsi.fastutil.longs.LongList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SculkShriekerBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -12,7 +12,9 @@ import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Switches natural shriekers between {@code can_summon=true} and {@code false} to match whether their
- * city is defeated (F2). Shriekers in unloaded chunks are switched when their chunk next loads.
+ * city is defeated (F2). Shriekers in unloaded chunks are switched when their chunk next loads. A
+ * recorded position found to no longer hold a shrieker is dropped (belt-and-suspenders with the
+ * removal mixin).
  */
 public final class CityShriekers {
 
@@ -21,15 +23,19 @@ public final class CityShriekers {
 
     /** Switches every loaded natural shrieker of a city to match its current defeated state. */
     public static void refreshLoaded(ServerLevel level, TrackedCity city) {
+        CityData data = CityTracker.get(level);
         boolean canSummon = !city.isDefeated();
-        LongList shriekers = city.getNaturalShriekers();
-        // Backwards, so apply() dropping the current entry from the list doesn't skip the next one.
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        for (int i = shriekers.size() - 1; i >= 0; i--) {
-            long packed = shriekers.getLong(i);
-            pos.set(packed);
-            if (level.isLoaded(pos)) {
-                apply(level, pos, packed, canSummon);
+        // A snapshot: dropping a missing shrieker changes the city's list.
+        for (long packed : city.getNaturalShriekers().toLongArray()) {
+            BlockPos pos = BlockPos.of(packed);
+            if (!level.isLoaded(pos)) {
+                continue;
+            }
+            BlockState state = level.getBlockState(pos);
+            if (!state.is(Blocks.SCULK_SHRIEKER)) {
+                data.removeNaturalShrieker(packed);
+            } else if (state.getValue(SculkShriekerBlock.CAN_SUMMON) != canSummon) {
+                level.setBlock(pos, state.setValue(SculkShriekerBlock.CAN_SUMMON, canSummon), 3);
             }
         }
     }
@@ -41,45 +47,18 @@ public final class CityShriekers {
      * sent the chunk afterwards, so no block update is needed.
      */
     public static void onChunkLoaded(ServerLevel level, LevelChunk chunk) {
-        ChunkPos chunkPos = chunk.getPos();
-        int minX = chunkPos.getMinBlockX();
-        int minZ = chunkPos.getMinBlockZ();
-        int maxX = chunkPos.getMaxBlockX();
-        int maxZ = chunkPos.getMaxBlockZ();
+        CityData data = CityTracker.get(level);
+        LongList shriekers = data.naturalShriekersIn(chunk.getPos());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        for (TrackedCity city : CityTracker.get(level).getCities()) {
-            // Natural shriekers always lie inside their city's bounds: skip cities this chunk misses.
-            if (!city.getBounds().intersects(minX, minZ, maxX, maxZ)) {
-                continue;
+        for (int i = 0; i < shriekers.size(); i++) {
+            long packed = shriekers.getLong(i);
+            BlockState state = chunk.getBlockState(pos.set(packed));
+            TrackedCity city = data.ownerOf(packed);
+            if (!state.is(Blocks.SCULK_SHRIEKER)) {
+                data.removeNaturalShrieker(packed);
+            } else if (city != null && state.getValue(SculkShriekerBlock.CAN_SUMMON) == city.isDefeated()) {
+                chunk.setBlockState(pos.immutable(), state.setValue(SculkShriekerBlock.CAN_SUMMON, !city.isDefeated()), false);
             }
-            boolean canSummon = !city.isDefeated();
-            LongList shriekers = city.getNaturalShriekers();
-            for (int i = shriekers.size() - 1; i >= 0; i--) {
-                long packed = shriekers.getLong(i);
-                int x = BlockPos.getX(packed);
-                int z = BlockPos.getZ(packed);
-                if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
-                    BlockState state = chunk.getBlockState(pos.set(packed));
-                    if (!state.is(Blocks.SCULK_SHRIEKER)) {
-                        CityTracker.onNaturalShriekerRemoved(level, packed);
-                    } else if (state.getValue(SculkShriekerBlock.CAN_SUMMON) != canSummon) {
-                        chunk.setBlockState(pos.immutable(), state.setValue(SculkShriekerBlock.CAN_SUMMON, canSummon), false);
-                    }
-                }
-            }
-        }
-    }
-
-    private static void apply(ServerLevel level, BlockPos pos, long packed, boolean canSummon) {
-        BlockState state = level.getBlockState(pos);
-        if (!state.is(Blocks.SCULK_SHRIEKER)) {
-            // No longer a shrieker: drop it from the record (belt-and-suspenders with the removal mixin).
-            CityTracker.onNaturalShriekerRemoved(level, packed);
-            return;
-        }
-        if (state.getValue(SculkShriekerBlock.CAN_SUMMON) != canSummon) {
-            // Immutable copy: the caller's cursor is mutable and block updates may keep the position.
-            level.setBlock(pos.immutable(), state.setValue(SculkShriekerBlock.CAN_SUMMON, canSummon), 3);
         }
     }
 }

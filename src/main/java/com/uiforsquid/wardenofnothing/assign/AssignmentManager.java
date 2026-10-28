@@ -3,9 +3,7 @@ package com.uiforsquid.wardenofnothing.assign;
 import com.uiforsquid.wardenofnothing.city.CityShriekers;
 import com.uiforsquid.wardenofnothing.city.CityTracker;
 import com.uiforsquid.wardenofnothing.config.Config;
-import com.uiforsquid.wardenofnothing.data.SlotState;
 import com.uiforsquid.wardenofnothing.data.TrackedCity;
-import com.uiforsquid.wardenofnothing.data.WardenSlot;
 import com.uiforsquid.wardenofnothing.warden.BossWarden;
 import com.uiforsquid.wardenofnothing.warden.CityWardens;
 import com.uiforsquid.wardenofnothing.warden.WardenEntityTags;
@@ -43,32 +41,16 @@ public final class AssignmentManager {
             refuse(level.getServer(), "not_in_city");
             return;
         }
-        if (city.aliveCount() >= Config.MAX_ASSIGNABLE_WARDENS.get()) {
+        if (!city.hasRoomFor(Config.MAX_ASSIGNABLE_WARDENS.get())) {
             refuse(level.getServer(), "warden_alive");
             return;
         }
 
-        boolean wasDefeated = city.isDefeated();
-        int index = city.lowestDeadSlotIndex();
-        WardenSlot slot;
-        if (index >= 0) {
-            slot = city.getSlots().get(index);
-        } else {
-            slot = new WardenSlot(SlotState.OUT, warden.getHealth(), -1L, warden.getUUID());
-            city.getSlots().add(slot);
-            index = city.getSlots().size() - 1;
-        }
-        slot.setState(SlotState.OUT);
-        slot.setRememberedHealth(warden.getHealth());
-        slot.setBurrowedAtGameTime(-1L);
-        slot.setOutWardenId(warden.getUUID());
-
-        // Boss stats in every way; the assigned Warden keeps its current health (decision 53).
+        // The assigned Warden keeps its current health (decision 53) and gets boss stats in every way.
+        TrackedCity.Claim claim = city.claim(warden.getUUID(), warden.getHealth(), level.getGameTime());
         BossWarden.applyStats(warden);
-        CityWardens.mark(warden, city.getId(), index);
-        CityTracker.get(level).setDirty();
-
-        if (wasDefeated) {
+        CityWardens.mark(warden, city.getId(), claim.slotIndex());
+        if (claim.revivedCity()) {
             CityShriekers.refreshLoaded(level, city); // respawn routine: natural shriekers switch back on
         }
     }

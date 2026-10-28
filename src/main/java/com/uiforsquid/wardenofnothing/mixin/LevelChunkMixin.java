@@ -41,7 +41,7 @@ public abstract class LevelChunkMixin {
         }
         BlockState old = this.getBlockState(pos);
         if (old.is(Blocks.SCULK_SHRIEKER) && !state.is(Blocks.SCULK_SHRIEKER)) {
-            CityTracker.onNaturalShriekerRemoved((ServerLevel) level, packed);
+            CityTracker.get((ServerLevel) level).removeNaturalShrieker(packed);
         }
     }
 }
